@@ -34,6 +34,10 @@ dev = [
     "pytest-cov>=4.0.0",
     "ruff>=0.0.270",
 ]
+api = [
+    "fastapi[standard]>=115",
+    "pydantic-settings>=2.8.0"
+]
 
 [tool.setuptools]
 packages = ["lettucedetect"]
