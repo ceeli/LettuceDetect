@@ -11,22 +11,39 @@ from lettucedetect.models.inference import HallucinationDetector
 
 
 class Settings(BaseSettings):
+    """Lettuce Web API configuration.
+
+    Uses the built-in settings functionallity of FastAPI. The values of an
+    instance of this class will automatically be populated with environment
+    variables of the same name.
+    """
+
     lettucedetect_model: str = "KRLabsOrg/lettucedect-base-modernbert-en-v1"
     lettucedetect_method: str = "transformer"
 
 
 class DetectionRequest(BaseModel):
+    """Request model for hallucination detection.
+
+    A request contains a list of contexts, a question and an answer. This
+    mirrors the interface of the `HallucinationDetector`.
+    """
+
     contexts: list[str]
     question: str
     answer: str
 
 
 class TokenDetectionItem(BaseModel):
+    """Response model list item of token-level detection."""
+
     token: str
     hallucination_score: float
 
 
 class SpanDetectionItem(BaseModel):
+    """Response model list item of span-level detection."""
+
     start: int
     end: int
     text: str
@@ -34,10 +51,14 @@ class SpanDetectionItem(BaseModel):
 
 
 class TokenDetectionResponse(BaseModel):
+    """Response model for token-level detection."""
+
     predictions: list[TokenDetectionItem]
 
 
 class SpanDetectionResponse(BaseModel):
+    """Response model for span-level detection."""
+
     predictions: list[SpanDetectionItem]
 
 
@@ -68,7 +89,8 @@ app = FastAPI(lifespan=init_detector)
 detector_lock = asyncio.Lock()
 
 
-async def run_detector_safe(request: DetectionRequest, output_format: str):
+async def run_detector_safe(request: DetectionRequest, output_format: str) -> dict:
+    """Run detector safely in a async environment without blocking."""
     async with detector_lock:
         preds = await run_in_threadpool(
             detector.predict,
@@ -80,15 +102,35 @@ async def run_detector_safe(request: DetectionRequest, output_format: str):
     return preds
 
 
-@app.post("/lettucedetect/token", response_model=TokenDetectionResponse)
+@app.post(
+    "/v1/lettucedetect/token",
+    response_model=TokenDetectionResponse,
+    summary="Run token-level hallucination detection.",
+)
 async def run_token_detection(request: DetectionRequest) -> dict:
+    """Run token-level hallucination detection.
+
+    Predicts hallucination scores for each token in `answer`. A higher score
+    correlates to a higher probability that this token is hallucinated.
+    """
     preds = await run_detector_safe(request, output_format="tokens")
     preds_converted = [{"token": p["token"], "hallucination_score": p["prob"]} for p in preds]
     return {"predictions": preds_converted}
 
 
-@app.post("/lettucedetect/spans", response_model=SpanDetectionResponse)
+@app.post(
+    "/v1/lettucedetect/spans",
+    response_model=SpanDetectionResponse,
+    summary="Run span-level hallucination detection.",
+)
 async def run_span_detection(request: DetectionRequest) -> dict:
+    """Run span-level hallucination detection.
+
+    Predicts hallucination scores for spans of text in `answer`. A higher score
+    correlates to a higher probability that this token is hallucinated.  The
+    hallucination score of a span corresponds to the highest hallucination score
+    of the tokens part of the span.
+    """
     preds = await run_detector_safe(request, output_format="spans")
     preds_converted = [
         {
