@@ -35,7 +35,7 @@ dev = [
     "ruff>=0.0.270",
 ]
 api = [
-    "fastapi[standard]>=115",
+    "fastapi[standard]>=0.115",
     "pydantic-settings>=2.8.0"
 ]
 
