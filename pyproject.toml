@@ -36,7 +36,8 @@ dev = [
 ]
 api = [
     "fastapi[standard]>=0.115",
-    "pydantic-settings>=2.8.0"
+    "pydantic-settings>=2.8.0",
+    "httpx>=0.28"
 ]
 
 [tool.setuptools]
