@@ -2,8 +2,9 @@ from typing import Type, TypeVar
 from urllib.parse import urljoin
 
 import httpx
-from models import DetectionRequest, SpanDetectionResponse, TokenDetectionResponse
 from pydantic import BaseModel
+
+from lettucedetect_api.models import DetectionRequest, SpanDetectionResponse, TokenDetectionResponse
 
 T = TypeVar("T", bound=BaseModel)
 

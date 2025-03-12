@@ -4,10 +4,10 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.concurrency import run_in_threadpool
-from models import DetectionRequest, SpanDetectionResponse, TokenDetectionResponse
 from pydantic_settings import BaseSettings
 
 from lettucedetect.models.inference import HallucinationDetector
+from lettucedetect_api.models import DetectionRequest, SpanDetectionResponse, TokenDetectionResponse
 
 
 class Settings(BaseSettings):

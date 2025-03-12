@@ -41,7 +41,7 @@ api = [
 ]
 
 [tool.setuptools]
-packages = ["lettucedetect"]
+packages = ["lettucedetect", "lettucedetect_api"]
 
 [tool.pytest]
 testpaths = ["tests"]
