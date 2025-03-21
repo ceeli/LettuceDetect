@@ -32,6 +32,7 @@ Homepage = "https://github.com/krlabsorg/lettucedetect"
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+    "pytest-asyncio>=0.25",
     "ruff>=0.0.270",
 ]
 api = [
@@ -75,3 +76,7 @@ ignore = [
     "ANN204", # missing return type for __init__
     "PTH123", # path.open
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"lettucedetect_api/test_server.py" = ["S101"]
+"lettucedetect_api/test_client.py" = ["S101"]
