@@ -1,22 +1,71 @@
+from dataclasses import dataclass
+from typing import Literal
+
 import torch
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
-from lettucedetect.preprocess.preprocess_ragtruth import RagTruthSample
+
+@dataclass
+class HallucinationSample:
+    prompt: str
+    answer: str
+    labels: list[dict]
+    split: Literal["train", "dev", "test"]
+    task_type: str
+    dataset: Literal["ragtruth", "ragbench"]
+    language: Literal["en", "de"]
+
+    def to_json(self) -> dict:
+        return {
+            "prompt": self.prompt,
+            "answer": self.answer,
+            "labels": self.labels,
+            "split": self.split,
+            "task_type": self.task_type,
+            "dataset": self.dataset,
+            "language": self.language,
+        }
+
+    @classmethod
+    def from_json(cls, json_dict: dict) -> "HallucinationSample":
+        return cls(
+            prompt=json_dict["prompt"],
+            answer=json_dict["answer"],
+            labels=json_dict["labels"],
+            split=json_dict["split"],
+            task_type=json_dict["task_type"],
+            dataset=json_dict["dataset"],
+            language=json_dict["language"],
+        )
 
 
-class RagTruthDataset(Dataset):
-    """Dataset for RAG truth data."""
+@dataclass
+class HallucinationData:
+    samples: list[HallucinationSample]
+
+    def to_json(self) -> list[dict]:
+        return [sample.to_json() for sample in self.samples]
+
+    @classmethod
+    def from_json(cls, json_dict: list[dict]) -> "HallucinationData":
+        return cls(
+            samples=[HallucinationSample.from_json(sample) for sample in json_dict],
+        )
+
+
+class HallucinationDataset(Dataset):
+    """Dataset for Hallucination data."""
 
     def __init__(
         self,
-        samples: list[RagTruthSample],
+        samples: list[HallucinationSample],
         tokenizer: AutoTokenizer,
         max_length: int = 4096,
     ):
         """Initialize the dataset.
 
-        :param samples: List of RagTruthSample objects.
+        :param samples: List of HallucinationSample objects.
         :param tokenizer: Tokenizer to use for encoding the data.
         :param max_length: Maximum length of the input sequence.
         """
@@ -51,21 +100,23 @@ class RagTruthDataset(Dataset):
         encoding = tokenizer(
             context,
             answer,
-            truncation=True,
+            truncation="only_first",
             max_length=max_length,
             return_offsets_mapping=True,
             return_tensors="pt",
             add_special_tokens=True,
         )
-        # Extract and remove offset mapping.
+
         offsets = encoding.pop("offset_mapping")[0]  # shape: (seq_length, 2)
 
-        # Compute answer start token index.
+        # Compute start token index.
+
         prompt_tokens = tokenizer.encode(context, add_special_tokens=False)
+
         # Tokenization adds [CLS] at the start and [SEP] after the prompt.
         answer_start_token = 1 + len(prompt_tokens) + 1  # [CLS] + prompt tokens + [SEP]
 
-        # Initialize labels: -100 for tokens before the answer, 0 for tokens in the answer.
+        # Initialize labels: -100 for tokens before the asnwer, 0 for tokens in the answer.
         labels = [-100] * encoding["input_ids"].shape[1]
 
         return encoding, labels, offsets, answer_start_token
@@ -79,12 +130,12 @@ class RagTruthDataset(Dataset):
         sample = self.samples[idx]
 
         # Use the shared class method to perform tokenization and initial label setup.
-        encoding, labels, offsets, answer_start = RagTruthDataset.prepare_tokenized_input(
+        encoding, labels, offsets, answer_start = HallucinationDataset.prepare_tokenized_input(
             self.tokenizer, sample.prompt, sample.answer, self.max_length
         )
-
         # Adjust the token labels based on the annotated hallucination spans.
         # Compute the character offset of the first answer token.
+
         answer_char_offset = offsets[answer_start][0] if answer_start < len(offsets) else None
 
         for i in range(answer_start, encoding["input_ids"].shape[1]):
