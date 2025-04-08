@@ -81,7 +81,7 @@ class TransformerDetector(BaseDetector):
 
         # Create a label tensor: mark tokens before answer as -100 (ignored) and answer tokens as 0.
         labels = torch.full_like(encoding.input_ids[0], -100, device=self.device)
-        labels[answer_start_token:] = 0
+        labels[answer_start_token:-1] = 0
         # Move encoding to the device
         encoding = {
             key: value.to(self.device)
