@@ -10,78 +10,127 @@ from backend_base import (
 from backend_llama_index import create_index, run_query
 from dotenv import load_dotenv
 
+from lettucedetect_api.models import TokenDetectionItem
 
-def sidebar() -> None:
+
+def _fix_whitespace(text: str) -> str:
+    return '<span style="white-space: pre-wrap;">' + text + "</span>"
+
+
+def _get_html_output(predictions: list[TokenDetectionItem]) -> str:
+    text = [item.token for item in predictions]
+
+    colors = [f"rgba(255, 0, 0, {item.hallucination_score * 0.7})" for item in predictions]
+    html_elements = [
+        f'<span style="background-color: {color};">{text}</span>'
+        for color, text in zip(colors, text)
+    ]
+    html = "".join(html_elements)
+    return html
+
+
+def _get_lettuce_detect_logo() -> str:
     logo_url = (
         "https://github.com/KRLabsOrg/LettuceDetect/blob/main/assets/lettuce_detective.png?raw=true"
     )
-    st.sidebar.markdown(
-        f"""
-        <div style="text-align: center; margin-top: -50px; z-index: 1;">
-            <img src="{logo_url}" style="width: 200px;"/>
-            <h2 style="margin-top: -20px; margin-bottom: 30px;">LettuceDetect</h2>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    return f"""
+    <div style="text-align: center; margin-top: -50px; z-index: 1;">
+        <img src="{logo_url}" style="width: 200px;"/>
+        <h2 style="margin-top: -20px; margin-bottom: 30px;">LettuceDetect</h2>
+    </div>
+    """
 
-    rag_backend = st.sidebar.selectbox("RAG Backend", ["LangChain", "LlamaIndex"])
-    llm_backend = st.sidebar.selectbox("LLM Backend", ["OpenAI", "Ollama"])
 
+def _draw_sidebar() -> dict:
+    config = {}
+    st.sidebar.markdown(_get_lettuce_detect_logo(), unsafe_allow_html=True)
+    config["llm_backend"] = st.sidebar.selectbox("LLM Backend", ["OpenAI", "Ollama"])
+    s = {}
     with st.sidebar.expander("LLM Backend Settings", expanded=True):
-        if llm_backend == "OpenAI":
-            st.text_input("OpenAI API Key", value=os.environ.get("OPENAI_API_KEY", ""))
-            st.text_input("Response Model", value="gpt-4.1-nano")
-            st.text_input("Embedding Model", value="text-embedding-3-small")
-        elif llm_backend == "Ollama":
-            st.text_input("Server Address", value="localhost:11434")
-            st.text_input("Response Model", value="llama3.1")
-            st.text_input("Embedding Model", value="mxbai-embed-large")
+        if config["llm_backend"] == "OpenAI":
+            env_api_key = os.environ.get("OPENAI_API_KEY", "")
+            s["api_key"] = st.text_input("OpenAI API Key", value=env_api_key)
+            s["response_model"] = st.text_input("Response Model", value="gpt-4.1-nano")
+            s["embedding_model"] = st.text_input("Embedding Model", value="text-embedding-3-small")
+        elif config["llm_backend"] == "Ollama":
+            s["base_url"] = st.text_input("Server Address", value="localhost:11434")
+            s["response_model"] = st.text_input("Response Model", value="llama3.2")
+            s["embedding_model"] = st.text_input("Embedding Model", value="mxbai-embed-large")
 
-    with st.sidebar.expander("Other Settings"):
-        st.text_area("System Message")
+    config["llm_backend_settings"] = s
+    return config
 
 
-async def main_page() -> None:
-    if "index_cache" not in st.session_state:
-        st.session_state["index_cache"] = {}
-    st.subheader("RAG with Hallucination Detection")
-    url = st.text_input(
+def _draw_header() -> str:
+    st.subheader("Website RAG")
+    return st.text_input(
         "URL of Website",
         value="https://lilianweng.github.io/posts/2023-06-23-agent/",
     )
-    prompt = st.chat_input("Say something (e.g. What is Task Decomposition?)")
 
-    if prompt:
-        with st.chat_message("user"):
-            st.write(prompt)
 
-        with st.chat_message("assistant"):
-            with st.status("Creating Index...", expanded=True) as status:
-                if url not in st.session_state["index_cache"]:
-                    print("create index")
-                    st.session_state["index_cache"][url] = await create_index(url, {})
-                index = st.session_state["index_cache"][url]
-                status.update(label="Generating Answer...")
-                answer_placeholder = st.empty()
-                full_text = ""
-                async for app_event in run_query(prompt, index, {}):
-                    if isinstance(app_event, TextChunkAppEvent):
+async def _draw_chat(url: str, question: str, config: dict) -> None:
+    llm_backend = config["llm_backend"]
+    llm_backend_config = config.get("llm_backend_settings", {})
+    with st.chat_message("user"):
+        st.write(question)
+        st.session_state["last_prompt"] = question
+
+    with st.chat_message("assistant"):
+        with st.status("Creating Index...", expanded=True) as status:
+            index_cache_key = (llm_backend, url)
+            if index_cache_key not in st.session_state["index_cache"]:
+                st.session_state["index_cache"][index_cache_key] = await create_index(
+                    url, llm_backend, llm_backend_config
+                )
+            index = st.session_state["index_cache"][index_cache_key]
+            status.update(label="Generating Answer...")
+            answer_placeholder = None
+            full_text = ""
+            async for app_event in run_query(question, index, llm_backend, llm_backend_config):
+                if isinstance(app_event, TextChunkAppEvent):
+                    if app_event.chunk != "":
                         full_text += app_event.chunk
-                        answer_placeholder.markdown(full_text)
-                    elif isinstance(app_event, HallucinationDetectionStartAppEvent):
-                        status.update(label="Detecting Hallucinations...")
-                    elif isinstance(app_event, HallucinationDetectionEndAppEvent):
-                        pass
-                status.update(label="Answer", state="complete")
+                        if answer_placeholder is None:
+                            answer_placeholder = st.empty()
+                        answer_placeholder.html(_fix_whitespace(full_text))
+                elif isinstance(app_event, HallucinationDetectionStartAppEvent):
+                    status.update(label="Detecting Hallucinations...")
+                elif isinstance(app_event, HallucinationDetectionEndAppEvent):
+                    html = _get_html_output(app_event.hallucination_scores)
+                    if answer_placeholder is None:
+                        answer_placeholder = st.empty()
+                    answer_placeholder.html(_fix_whitespace(html))
+                    st.session_state["last_answer"] = app_event.hallucination_scores
+            status.update(label="Answer", state="complete")
 
 
-async def main():
+async def _draw_chat_cached() -> None:
+    with st.chat_message("user"):
+        st.write(st.session_state["last_prompt"])
+    with st.chat_message("assistant"):
+        with st.status("Answer", expanded=True, state="complete"):
+            html = _get_html_output(st.session_state["last_answer"])
+            answer_placeholder = st.empty()
+            answer_placeholder.html(_fix_whitespace(html))
+
+
+async def _main() -> None:
+    # Initialize session variables.
+    if "index_cache" not in st.session_state:
+        st.session_state["index_cache"] = {}
+
     load_dotenv()
-    st.set_page_config(page_title="RAG with Lettuce")
-    sidebar()
-    await main_page()
+    st.set_page_config(page_title="LettuceDetect RAG Demo")
+    config = _draw_sidebar()
+    url = _draw_header()
+
+    question = st.chat_input("Ask something (e.g. What is Task Decomposition?)")
+    if question:
+        await _draw_chat(url, question, config)
+    elif "last_prompt" in st.session_state and "last_answer" in st.session_state:
+        await _draw_chat_cached()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(_main())

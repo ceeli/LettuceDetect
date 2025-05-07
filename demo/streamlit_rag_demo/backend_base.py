@@ -20,4 +20,4 @@ class HallucinationDetectionStartAppEvent(AppEvent):
 
 @dataclass
 class HallucinationDetectionEndAppEvent(AppEvent):
-    predictions: list[TokenDetectionItem]
+    hallucination_scores: list[TokenDetectionItem]

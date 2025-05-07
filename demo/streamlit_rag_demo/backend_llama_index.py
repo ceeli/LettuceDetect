@@ -19,7 +19,9 @@ from llama_index.core.workflow import (
     Workflow,
     step,
 )
+from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.llms.ollama import Ollama
 from llama_index.llms.openai import OpenAI
 from llama_index.readers.web import SimpleWebPageReader
 
@@ -28,7 +30,7 @@ from lettucedetect_api.client import LettuceClientAsync
 _default_system_message = (
     "You are an assistant for question-answering tasks. "
     "Use the following pieces of retrieved context to answer the question. "
-    "If you don't know the answer, just say that you don't know. "
+    "Don't use emojis."
 )
 
 _prompt_template = RichPromptTemplate(
@@ -55,10 +57,26 @@ class _HallucinationDetectionStartEvent(Event):
     pass
 
 
-async def create_index(url: str, config: dict) -> VectorStoreIndex:
+def _get_embedding_model(llm_backend: str, config: dict):
+    if llm_backend == "OpenAI":
+        return OpenAIEmbedding(model_name=config["embedding_model"], api_key=config["api_key"])
+    elif llm_backend == "Ollama":
+        return OllamaEmbedding(model_name=config["embedding_model"], base_url=config["base_url"])
+    raise RuntimeError("Unsupported LLM Backend")
+
+
+def _get_response_model(llm_backend: str, config: dict):
+    if llm_backend == "OpenAI":
+        return OpenAI(model=config["response_model"], api_key=config["api_key"])
+    elif llm_backend == "Ollama":
+        return Ollama(model=config["response_model"], base_url=config["base_url"])
+    raise RuntimeError("Unsupported LLM Backend")
+
+
+async def create_index(url: str, llm_backend: str, config: dict) -> VectorStoreIndex:
     documents = SimpleWebPageReader(html_to_text=True).load_data([url])
     splitter = SentenceSplitter(chunk_size=300, chunk_overlap=60)
-    embed_model = OpenAIEmbedding(model_name="text-embedding-3-small")
+    embed_model = _get_embedding_model(llm_backend, config)
     return VectorStoreIndex.from_documents(
         documents=documents,
         embed_model=embed_model,
@@ -67,19 +85,18 @@ async def create_index(url: str, config: dict) -> VectorStoreIndex:
 
 
 async def run_query(
-    question: str, index: VectorStoreIndex, config: dict
+    question: str, index: VectorStoreIndex, llm_backend: str, config: dict
 ) -> Generator[AppEvent, None, None]:
     workflow = RAGWorkflow()
-    handler = workflow.run(index=index, question=question)
+    handler = workflow.run(index=index, question=question, llm_backend=llm_backend, config=config)
     async for ev in handler.stream_events():
         if isinstance(ev, _TextChunkEvent):
             yield TextChunkAppEvent(chunk=ev.chunk)
         elif isinstance(ev, _HallucinationDetectionStartEvent):
             yield HallucinationDetectionStartAppEvent()
         elif isinstance(ev, StopEvent):
-            print(ev)
             yield HallucinationDetectionEndAppEvent(
-                predictions=ev.result["hallucination_scores"],
+                hallucination_scores=ev.result["hallucination_scores"],
             )
 
 
@@ -88,7 +105,9 @@ class RAGWorkflow(Workflow):
     async def query(self, ctx: Context, ev: StartEvent) -> _AnswerEvent:
         question = ev.get("question")
         index = ev.get("index")
-        llm = OpenAI(model="gpt-4.1-nano")
+        llm_backend = ev.get("llm_backend")
+        config = ev.get("config")
+        llm = _get_response_model(llm_backend, config)
         retriever = index.as_retriever(similarity_top_k=2)
         synthesizer = get_response_synthesizer(
             llm=llm,
