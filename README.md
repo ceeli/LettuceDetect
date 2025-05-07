@@ -176,11 +176,13 @@ The model can output predictions in two formats:
 }]
 ```
 
-## Streamlit Demo
+## Streamlit Demos
 
-Check out the Streamlit demo to see the model in action.
+Check out the Streamlit demos to see the model in action.
 
-Install streamlit:
+### Hallucination Detection
+
+Install dependencies:
 
 ```bash
 pip install streamlit
@@ -190,6 +192,26 @@ Run the demo:
 
 ```bash
 streamlit run demo/streamlit_demo.py
+```
+
+### RAG with Hallucination Detection
+
+Install dependencies:
+
+```bash
+pip install streamlit llama-index llama-index-readers-web llama-index-embeddings-ollama
+```
+
+Start LettuceDetect API (see below for more details):
+
+```bash
+python scripts/start_api.py dev
+```
+
+Run the demo:
+
+```bash
+streamlit run demo/streamlit_rag_demo/main.py
 ```
 
 ## Use the Web API
@@ -257,6 +279,20 @@ print(response.predictions)
 
 See `demo/detection_api.ipynb` for more examples.
 For async support use the `LettuceClientAsync` class instead.
+
+
+## Integration with RAG Frameworks
+
+Using the LettuceDetect Web API it's easy to integrate halluciantion detection
+into popular RAG frameworks like LangChain, LlamaIndex or Heystack.
+Take a look at our demo notebooks in the demo/ folder:
+
+- demo/langchain_demo.ipynb
+- demo/llamaindex_demo.ipynb
+- (ToDo) demo/haystack_demo.ipynb
+
+For an example of a full RAG application have a look at the "Website RAG"
+streamlit demo in the demo/streamlit_rag_demo/ folder.
 
 ## License
 
