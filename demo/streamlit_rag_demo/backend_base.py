@@ -9,6 +9,11 @@ class AppEvent:
 
 
 @dataclass
+class ContextAppEvent(AppEvent):
+    context: list[str]
+
+
+@dataclass
 class TextChunkAppEvent(AppEvent):
     chunk: str
 

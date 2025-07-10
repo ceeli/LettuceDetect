@@ -3,6 +3,7 @@ from typing import Generator
 
 from backend_base import (
     AppEvent,
+    ContextAppEvent,
     HallucinationDetectionEndAppEvent,
     HallucinationDetectionStartAppEvent,
     TextChunkAppEvent,
@@ -53,6 +54,10 @@ class _TextChunkEvent(Event):
     chunk: str
 
 
+class _ContextEvent(Event):
+    context: list[str]
+
+
 class _HallucinationDetectionStartEvent(Event):
     pass
 
@@ -92,6 +97,8 @@ async def run_query(
     async for ev in handler.stream_events():
         if isinstance(ev, _TextChunkEvent):
             yield TextChunkAppEvent(chunk=ev.chunk)
+        elif isinstance(ev, _ContextEvent):
+            yield ContextAppEvent(context=ev.context)
         elif isinstance(ev, _HallucinationDetectionStartEvent):
             yield HallucinationDetectionStartAppEvent()
         elif isinstance(ev, StopEvent):
@@ -119,13 +126,16 @@ class RAGWorkflow(Workflow):
             retriever=retriever,
             response_synthesizer=synthesizer,
         )
-        streaming_response = query_engine.query(question)
+        # streaming_response = query_engine.query(question)
+        source_nodes = retriever.retrieve(question)
+        context = [n.node.text for n in source_nodes]
+        ctx.write_event_to_stream(_ContextEvent(context=context))
+        streaming_response = synthesizer.synthesize(question, nodes=source_nodes)
         full_response = []
         for chunk in streaming_response.response_gen:
             ctx.write_event_to_stream(_TextChunkEvent(chunk=chunk))
             await asyncio.sleep(0)
             full_response.append(chunk)
-        context = [n.node.text for n in streaming_response.source_nodes]
         return _AnswerEvent(question=question, answer="".join(full_response), context=context)
 
     @step

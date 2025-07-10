@@ -3,6 +3,7 @@ import os
 
 import streamlit as st
 from backend_base import (
+    ContextAppEvent,
     HallucinationDetectionEndAppEvent,
     HallucinationDetectionStartAppEvent,
     TextChunkAppEvent,
@@ -77,17 +78,28 @@ async def _draw_chat(url: str, question: str, config: dict) -> None:
         st.session_state["last_prompt"] = question
 
     with st.chat_message("assistant"):
-        with st.status("Creating Index...", expanded=True) as status:
+        with st.status("Creating Index...") as status:
             index_cache_key = (llm_backend, url)
             if index_cache_key not in st.session_state["index_cache"]:
                 st.session_state["index_cache"][index_cache_key] = await create_index(
                     url, llm_backend, llm_backend_config
                 )
             index = st.session_state["index_cache"][index_cache_key]
-            status.update(label="Generating Answer...")
+
+            status.update(label="Fetching Context...")
+            event_iter = run_query(question, index, llm_backend, llm_backend_config)
+            async for app_event in event_iter:
+                if isinstance(app_event, ContextAppEvent):
+                    next_chunk_str = "\n\n-- NEXT CHUNK --\n\n"
+                    header = f"**Nr. of chunks: {len(app_event.context)}**{next_chunk_str}"
+                    context_text = next_chunk_str.join(app_event.context)
+                    st.markdown(header + "\n\n" + context_text)
+                    break
+            status.update(label="Context", state="complete")
+        with st.status("Generating Answer...", expanded=True) as status:
             answer_placeholder = None
             full_text = ""
-            async for app_event in run_query(question, index, llm_backend, llm_backend_config):
+            async for app_event in event_iter:
                 if isinstance(app_event, TextChunkAppEvent):
                     if app_event.chunk != "":
                         full_text += app_event.chunk
@@ -109,6 +121,8 @@ async def _draw_chat_cached() -> None:
     with st.chat_message("user"):
         st.write(st.session_state["last_prompt"])
     with st.chat_message("assistant"):
+        with st.status("Context", state="complete"):
+            st.text("Hi")
         with st.status("Answer", expanded=True, state="complete"):
             html = _get_html_output(st.session_state["last_answer"])
             answer_placeholder = st.empty()
@@ -116,10 +130,11 @@ async def _draw_chat_cached() -> None:
 
 
 async def _main() -> None:
-    # Initialize session variables.
+    # Initialize cache of RAG index as Streamlit session variable.
     if "index_cache" not in st.session_state:
         st.session_state["index_cache"] = {}
 
+    # Load environment file for API keys.
     load_dotenv()
     st.set_page_config(page_title="LettuceDetect RAG Demo")
     config = _draw_sidebar()
@@ -129,8 +144,12 @@ async def _main() -> None:
     if question:
         await _draw_chat(url, question, config)
     elif "last_prompt" in st.session_state and "last_answer" in st.session_state:
+        # Required so that the chat doesn't disappear when inputs are modified
+        # in the sidebar or the header.
         await _draw_chat_cached()
 
 
 if __name__ == "__main__":
+    # Use async because RAG Frameworks are built for it.
+    # Makes token and event streaming possible/easier.
     asyncio.run(_main())
