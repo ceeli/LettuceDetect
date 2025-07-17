@@ -1,6 +1,9 @@
 import asyncio
 import os
+from typing import Callable
 
+import backend_llama_index
+import backend_streamlit
 import streamlit as st
 from backend_base import (
     ContextAppEvent,
@@ -8,10 +11,14 @@ from backend_base import (
     HallucinationDetectionStartAppEvent,
     TextChunkAppEvent,
 )
-from backend_llama_index import create_index, run_query
 from dotenv import load_dotenv
 
 from lettucedetect_api.models import TokenDetectionItem
+
+_backends = {
+    "llama_index": (backend_llama_index.create_index, backend_llama_index.run_query),
+    "langchain": (backend_streamlit.create_index, backend_streamlit.run_query),
+}
 
 
 def _fix_whitespace(text: str) -> str:
@@ -45,6 +52,7 @@ def _get_lettuce_detect_logo() -> str:
 def _draw_sidebar() -> dict:
     config = {}
     st.sidebar.markdown(_get_lettuce_detect_logo(), unsafe_allow_html=True)
+    config["rag_backend"] = st.sidebar.selectbox("RAG Backend", ["LlamaIndex", "LangChain"])
     config["llm_backend"] = st.sidebar.selectbox("LLM Backend", ["OpenAI", "Ollama"])
     s = {}
     with st.sidebar.expander("LLM Backend Settings", expanded=True):
@@ -70,16 +78,26 @@ def _draw_header() -> str:
     )
 
 
+def _get_rag_backend(rag_backend: str) -> tuple[Callable, Callable]:
+    if rag_backend == "LlamaIndex":
+        return _backends["llama_index"]
+    if rag_backend == "LangChain":
+        return _backends["langchain"]
+    raise ValueError("invalid RAG backend")
+
+
 async def _draw_chat(url: str, question: str, config: dict) -> None:
     llm_backend = config["llm_backend"]
+    rag_backend = config["rag_backend"]
     llm_backend_config = config.get("llm_backend_settings", {})
     with st.chat_message("user"):
         st.write(question)
         st.session_state["last_prompt"] = question
 
+    create_index, run_query = _get_rag_backend(rag_backend)
     with st.chat_message("assistant"):
         with st.status("Creating Index...") as status:
-            index_cache_key = (llm_backend, url)
+            index_cache_key = (rag_backend, llm_backend, url)
             if index_cache_key not in st.session_state["index_cache"]:
                 st.session_state["index_cache"][index_cache_key] = await create_index(
                     url, llm_backend, llm_backend_config

@@ -236,7 +236,9 @@ streamlit run demo/streamlit_demo.py
 Install dependencies:
 
 ```bash
-pip install streamlit llama-index llama-index-readers-web llama-index-embeddings-ollama
+pip install streamlit llama-index llama-index-readers-web \
+llama-index-llms-ollama llama-index-embeddings-ollama \
+langchain langchain_community langchain-openai langchain-ollama langgraph bs4
 ```
 
 Start LettuceDetect API (see below for more details):
