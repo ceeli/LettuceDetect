@@ -42,6 +42,8 @@ Our models are inspired from the [Luna](https://aclanthology.org/2025.coling-ind
 - ⚖️ **MIT-licensed** models & code
 - 🤖 **HF Integration**: one-line model loading
 - 📦 **Easy to use python API**: can be downloaded from pip and few lines of code to integrate into your RAG system
+- 🖥️ **Web API**: integrate LettuceDetect into you application using our Web API
+- 🔍 **RAG Support**: integrates easily with RAG applications using LangChain, LlamaIndex or Haystack
 
 ### Installation
 
@@ -231,107 +233,14 @@ Run the demo:
 streamlit run demo/streamlit_demo.py
 ```
 
-### RAG with Hallucination Detection
+## Using our Web API
 
-Install dependencies:
-
-```bash
-pip install streamlit llama-index llama-index-readers-web \
-llama-index-llms-ollama llama-index-embeddings-ollama \
-langchain langchain_community langchain-openai langchain-ollama langgraph bs4
-```
-
-Start LettuceDetect API (see below for more details):
-
-```bash
-python scripts/start_api.py dev
-```
-
-Run the demo:
-
-```bash
-streamlit run demo/streamlit_rag_demo/main.py
-```
-
-## Use the Web API
-
-LettuceDetect comes with it's own web API and python client library. To use it, make sure to install the package with the optional API dependencies:
-
-```bash
-pip install -e .[api]
-```
-
-or
-
-```bash
-pip install lettucedetect[api]
-```
-
-Start the API server with the `scripts/start_api.py` script:
-
-```bash
-python scripts/start_api.py dev  # use "prod" for production environments
-```
-
-Usage:
-
-```bash
-usage: start_api.py [-h] [--model MODEL] [--method {transformer}] {prod,dev}
-
-Start lettucedetect Web API.
-
-positional arguments:
-  {prod,dev}            Choose "dev" for development or "prod" for production
-                        environments. The serve script uses "fastapi dev" for "dev" or
-                        "fastapi run" for "prod" to start the web server. Additionally
-                        when choosing the "dev" mode, python modules can be directly
-                        imported from the repositroy without installing the package.
-
-options:
-  -h, --help            show this help message and exit
-  --model MODEL         Path or huggingface URL to the model. The default value is
-                        "KRLabsOrg/lettucedetect-base-modernbert-en-v1".
-  --method {transformer}
-                        Hallucination detection method. The default value is
-                        "transformer".
-```
-
-Example using the python client library:
-
-```python
-from lettucedetect_api.client import LettuceClient
-
-contexts = [
-    "France is a country in Europe. "
-    "The capital of France is Paris. "
-    "The population of France is 67 million.",
-]
-question = "What is the capital of France? What is the population of France?"
-answer = "The capital of France is Paris. The population of France is 69 million."
-
-client = LettuceClient("http://127.0.0.1:8000")
-response = client.detect_spans(contexts, question, answer)
-print(response.predictions)
-
-# [SpanDetectionItem(start=31, end=71, text=' The population of France is 69 million.', hallucination_score=0.989198625087738)]
-```
-
-See `demo/detection_api.ipynb` for more examples.
-For async support use the `LettuceClientAsync` class instead.
-
+LettuceDetect comes with it's own web API and python client library. See the [Web API README](docs/API.md) for more details.
 
 ## Integration with RAG Frameworks
 
 Using the LettuceDetect Web API it's easy to integrate halluciantion detection
-into popular RAG frameworks like LangChain, LlamaIndex or Heystack.
-Take a look at our demo notebooks in the demo/ folder:
-
-- demo/langchain_demo.ipynb
-- demo/llamaindex_demo.ipynb
-- (ToDo) demo/haystack_demo.ipynb
-
-For an example of a full RAG application have a look at the "Website RAG"
-streamlit demo in the demo/streamlit_rag_demo/ folder.
+into popular RAG frameworks like LangChain, LlamaIndex or Heystack. See the [RAG Integration README](docs/RAG_INTEGRATION.md) for more details.
 
 ## License
 
